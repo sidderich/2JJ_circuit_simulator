@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 from scipy.integrate import solve_ivp
+from scipy.signal import find_peaks
+import sys
 
 
 class JJs:
@@ -10,6 +12,7 @@ class JJs:
         self.R1 = R1
         self.R2 = R2
         self.R = R
+        
 
     def model(self,t, x, I=0):
         # normalize the current to IC1
@@ -38,6 +41,34 @@ class JJs:
         n = int(val/(2*np.pi))
         return val - (2*np.pi*n)
     
+    @staticmethod
+    def period_finder(t, phi):
+        '''
+        Find time period of the oscillation
+        '''
+        # Find the peaks
+        # peaks = np.where((phi[1:-1] > phi[:-2]) & (phi[1:-1] > phi[2:]))[0]
+        peaks, _ = find_peaks(np.sin(phi))
+        if len(peaks) < 2:
+            print('Not enough peaks found to calculate the period of oscillation')
+            sys.exit(1)
+        # Calculate the period
+        period = np.mean(np.diff(t[peaks]))
+        return period
+    
+    @staticmethod
+    def check_dt(t, phi, dt):
+        '''
+        Check if the time step is small enough
+        '''
+        period = JJs.period_finder(t, phi)
+        if dt > period/20:
+            print(f'Time step is too large, the period is {period} and the time step is {dt}')
+            sys.exit(1)
+        else:
+            return
+
+
     def solve(self, t_span,dt,t_av_start, x0, I, iterative_av = False):
         '''
         Solve the system of ODEs using the solve_ivp function from scipy.integrate
@@ -50,23 +81,76 @@ class JJs:
         :return: V1, V2, and phi1, phi2 which are starting conditions for next iteration
         '''
         methods = ['RK45', 'RK23', 'DOP853', 'Radau', 'BDF', 'LSODA']
-       
-
 
         if iterative_av == False:
             sol = solve_ivp(self.model, t_span, x0, t_eval=None, method=methods[1], args=(I,), max_step=dt)
             phi1 = sol.y[0]
             phi2 = sol.y[1]
             t = sol.t
+            # check dt
+            JJs.check_dt(t, phi1, dt)
+            JJs.check_dt(t, phi2, dt)
             index = np.where(sol.t > t_av_start)[0][0]
             V1 = 1/(sol.t[-1]-sol.t[index]) * (phi1[-1] - phi1[index])
             V2 = 1/(sol.t[-1]-sol.t[index]) * (phi2[-1] - phi2[index])
 
-        else:
-            return "Not implemented yet"
-        
-        return V1, V2, phi1[-1], phi2[-1]
+        else: # iterative averaging
+            epsilon = 1e-3
+            t_av = t_av_start # time to start averaging the voltage, will grow if the voltage is not stable
+            t_av_factor = 1.2  # factor to increase t_av if the voltage is not stable
+            t_av_max = 10000  # maximum time to average the voltage
+            # Initial solution
+            sol = solve_ivp(self.model, t_span, x0, t_eval=None, method=methods[1], args=(I,), max_step=dt)
+            phi1 = sol.y[0]
+            phi2 = sol.y[1]
+            t = sol.t
+            
+
+            # Index after t_av
+            index = np.where(sol.t > t_av)[0][0]
+
+            while True:
+                # Calculate the voltage after t_av
+                V1 = 1/(t[-1]-t[t_av_start]) * (phi1[-1] - phi1[t_av_start])
+                V2 = 1/(t[-1]-t[t_av_start]) * (phi2[-1] - phi2[t_av_start])
+               
+                # Increase the time to average the voltage
+                t_av = t_av_factor * t_av
+                
+                if t_av > t_av_max:
+                    print(f'The voltage is not stable after {t_av_max} timesteps')
+                    break
+                
+                # Calculate the new phi after t_av
+                sol_check = solve_ivp(self.model, (t[-1], t[-1]+t_av), [phi1[-1],phi2[-1]], t_eval=None, method=methods[1], args=(I,), max_step=dt)
+                phi1_check = sol_check.y[0]
+                phi2_check = sol_check.y[1]
+                t_check = sol_check.t
+                if I > self.Ic1 or I > self.Ic2:
+                    JJs.check_dt(t, phi1_check, dt)
+                    JJs.check_dt(t, phi2_check, dt)
+
+                # Concatenate the new solution with the old one
+                phi1 = np.hstack((phi1, phi1_check))
+                phi2 = np.hstack((phi2, phi2_check))
+                t = np.hstack((t, t_check))
+                
+                # Index after t_av
+                index = np.where(t > t_av)[0][0]
+
+                # Calculate the voltage after t_av
+                V1_later = 1/(t[-1]-t[index]) * (phi1[-1] - phi1[index])
+                V2_later = 1/(t[-1]-t[index]) * (phi2[-1] - phi2[index])
+
+                # Check if the voltage is stable by checking if voltage after t_av is close to the voltage after t_av_start
+                if np.abs(V1-V1_later) < epsilon and np.abs(V2-V2_later) < epsilon:
+                    V1 = V1_later
+                    V2 = V2_later
+                    break
+                    
+        return V1, V2, phi1, phi2, t
     
+  
 
 
 if __name__ == "__main__":
