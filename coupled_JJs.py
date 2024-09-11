@@ -13,6 +13,8 @@ class JJs:
         self.R2 = R2
         self.R = R
         
+        # initialize the time step
+        self.dt = 0.1
 
     def model(self,t, x, I=0):
         # normalize the current to IC1
@@ -46,34 +48,46 @@ class JJs:
         '''
         Find time period of the oscillation
         '''
+
         # Find the peaks
-        # peaks = np.where((phi[1:-1] > phi[:-2]) & (phi[1:-1] > phi[2:]))[0]
+
+        '''peaks = np.where((phi[1:-1] > phi[:-2]) & (phi[1:-1] > phi[2:]))[0]'''
+
         peaks, _ = find_peaks(np.sin(phi))
         if len(peaks) < 2:
             print('Not enough peaks found to calculate the period of oscillation')
             sys.exit(1)
-        # Calculate the period
+
         period = np.mean(np.diff(t[peaks]))
+        # Calculate threshhold for standard derivation
+        # threshhold = 0.01 * period
+        # Show warning if the period is not stable
+        # Use standard derivation of the period if the period is not stable
+        '''if np.std(np.diff(t[peaks])) > threshhold:
+            print('\n WARNING: The period is not stable')'''
+
+        # Calculate the period
         return period
     
-    @staticmethod
-    def check_dt(t, phi, dt):
+    
+    def check_dt(self, t, phi):
         '''
         Check if the time step is small enough
         '''
         period = JJs.period_finder(t, phi)
-        if dt > period/20:
-            print(f'Time step is too large, the period is {period} and the time step is {dt}')
-            sys.exit(1)
+        if self.dt > period/20:
+            print(f'\n WARNING: Time step is too large! Period: {period} timestep: {self.dt} \n Adjusting the time step')
+            # increase the time step
+            self.dt = self.dt * 0.9
+            return False
         else:
-            return
+            return True
 
 
-    def solve(self, t_span,dt,t_av_start, x0, I, iterative_av = False):
+    def solve(self, t_span,t_av_start, x0, I, iterative_av = True, dt = 0.05):
         '''
         Solve the system of ODEs using the solve_ivp function from scipy.integrate
         :param t_span: tuple with the initial and final time
-        :param dt: time step
         :param t_av_start: time to start averaging the voltage
         :param x0: initial conditions
         :param I: external current
@@ -83,13 +97,13 @@ class JJs:
         methods = ['RK45', 'RK23', 'DOP853', 'Radau', 'BDF', 'LSODA']
 
         if iterative_av == False:
-            sol = solve_ivp(self.model, t_span, x0, t_eval=None, method=methods[1], args=(I,), max_step=dt)
+            sol = solve_ivp(self.model, t_span, x0, t_eval=None, method=methods[1], args=(I,), max_step=self.dt)
             phi1 = sol.y[0]
             phi2 = sol.y[1]
             t = sol.t
             # check dt
-            JJs.check_dt(t, phi1, dt)
-            JJs.check_dt(t, phi2, dt)
+            self.check_dt(t, phi1)
+            self.check_dt(t, phi2)
             index = np.where(sol.t > t_av_start)[0][0]
             V1 = 1/(sol.t[-1]-sol.t[index]) * (phi1[-1] - phi1[index])
             V2 = 1/(sol.t[-1]-sol.t[index]) * (phi2[-1] - phi2[index])
@@ -100,7 +114,7 @@ class JJs:
             t_av_factor = 1.2  # factor to increase t_av if the voltage is not stable
             t_av_max = 10000  # maximum time to average the voltage
             # Initial solution
-            sol = solve_ivp(self.model, t_span, x0, t_eval=None, method=methods[1], args=(I,), max_step=dt)
+            sol = solve_ivp(self.model, t_span, x0, t_eval=None, method=methods[1], args=(I,), max_step=self.dt)
             phi1 = sol.y[0]
             phi2 = sol.y[1]
             t = sol.t
@@ -109,7 +123,9 @@ class JJs:
             # Index after t_av
             index = np.where(sol.t > t_av)[0][0]
 
-            while True:
+            successful = False
+
+            while not successful:
                 # Calculate the voltage after t_av
                 V1 = 1/(t[-1]-t[t_av_start]) * (phi1[-1] - phi1[t_av_start])
                 V2 = 1/(t[-1]-t[t_av_start]) * (phi2[-1] - phi2[t_av_start])
@@ -126,9 +142,14 @@ class JJs:
                 phi1_check = sol_check.y[0]
                 phi2_check = sol_check.y[1]
                 t_check = sol_check.t
+
+                # Check if the timestep is small enough
                 if I > self.Ic1 or I > self.Ic2:
-                    JJs.check_dt(t, phi1_check, dt)
-                    JJs.check_dt(t, phi2_check, dt)
+                    if self.check_dt(t_check, phi1_check) and self.check_dt(t_check, phi2_check):
+                        successful = False
+                    else:
+                        # Skip the rest of the loop
+                        continue
 
                 # Concatenate the new solution with the old one
                 phi1 = np.hstack((phi1, phi1_check))

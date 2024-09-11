@@ -157,7 +157,6 @@ class GUI:
             return
         I_max = float(self.I.get())
         t_span = (0, 500)
-        dt = 0.05
         t_av_start = 100
         x0 = [0, 0]
         self.store.result = self.store.result.iloc[0:0]
@@ -183,7 +182,6 @@ class GUI:
             V1, V2, phi1, phi2, t = JJs.solve(
                 self.JJ, 
                 t_span, 
-                dt, 
                 t_av_start, 
                 x0, 
                 I, 
