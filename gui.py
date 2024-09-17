@@ -1,6 +1,9 @@
 import tkinter as tk
 from tkinter import filedialog
+from tkinter import scrolledtext
 import os
+import sys
+import json
 
 import threading
 import numpy as np
@@ -12,6 +15,26 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 
 from coupled_JJs import JJs
+
+
+def load_config(filepath):
+    with open(filepath, 'r') as f:
+        config = json.load(f)
+    return config
+
+class RedirectText(object):
+    def __init__(self, widget):
+        self.widget = widget
+        self.widget.config(state=tk.NORMAL)
+
+    def write(self, string):
+        self.widget.insert(tk.END, string)
+        self.widget.see(tk.END)
+
+    def flush(self):
+        pass
+
+
 class storage:
     def __init__(self):
         self.result = pd.DataFrame(columns=['I', 'V1', 'V2'])
@@ -42,7 +65,17 @@ class GUI:
         self.button_frame.grid(row=0, column=3)
         # Erstelle Frame für die Plots
         self.plot_frame = tk.Frame(self.window)
-        self.plot_frame.grid(row=0, column=0, columnspan=2)
+        self.plot_frame.grid(row=0, column=0, columnspan=2, rowspan=2)
+        # Erstelle Frame für die Konsole
+        self.console_frame = tk.Frame(self.window)
+        self.console_frame.grid(row=1, column=2, columnspan=2, padx=10, pady=10)
+
+        # Erstelle die Konsole
+        self.console = scrolledtext.ScrolledText(self.console_frame, wrap=tk.WORD, width=50, height=10)
+        self.console.grid(row=0, column=0)
+        # Leite die Ausgabe der Konsole um
+        # sys.stdout = RedirectText(self.console)
+        # sys.stderr = RedirectText(self.console)
 
         # Erstelle einen canvas
         self.fig = Figure(figsize=(12,8))
@@ -88,6 +121,12 @@ class GUI:
         self.R.pack()
         self.R.insert(0, JJ.R)
 
+        self.L_label = tk.Label(self.param_frame, text="L")
+        self.L_label.pack()
+        self.L = tk.Entry(self.param_frame)
+        self.L.pack()
+        self.L.insert(0, JJ.L)
+
         # Bis zu diesem Strom soll simuliert werden
         self.I_label = tk.Label(self.param_frame, text="I_max")
         self.I_label.pack()
@@ -126,16 +165,18 @@ class GUI:
         self.plot_dynamics_button = tk.Button(self.button_frame, text="Plot phi", command= self.plot_dynamics)
         self.plot_dynamics_button.pack()
 
+        # Aktualisiere Fenster und passe Größe an
+        self.window.update()
+        self.window.geometry("")
+
 
         self.window.mainloop()
+
 
     def set_path_btn(self):
         # browse folder tkinter
         directory = filedialog.askdirectory()
         self.store.set_path(directory)
-
-    
-
 
     def create_JJs(self):
         Ic1 = float(self.Ic1.get())
@@ -143,22 +184,26 @@ class GUI:
         R1 = float(self.R1.get())
         R2 = float(self.R2.get())
         R = float(self.R.get())
+        L = float(self.L.get())
 
-        self.JJ = JJs(Ic1, Ic2, R1, R2, R)
+        self.JJ = JJs(Ic1, Ic2, R1, R2, R, L)
         print("JJs created")
 
     def thread_simulation(self):
-        t = threading.Thread(target=self.simulate, args=())
+        t = threading.Thread(target=self.simulate, args=('ind',))
         t.start()
 
-    def simulate(self):
+    def simulate(self, model = 'ind'):
         if self.store.path is None:
             print("Please set a path first")
             return
         I_max = float(self.I.get())
         t_span = (0, 500)
         t_av_start = 100
-        x0 = [0, 0]
+        if model == 'ind':
+            x0 = [0,0,0]
+        else:
+            x0 = [0,0]
         self.store.result = self.store.result.iloc[0:0]
         self.store.dynamics = self.store.dynamics.iloc[0:0]
         
@@ -177,15 +222,25 @@ class GUI:
         # Definiere die Bereiche für die Schleife
         current_sweep = list(range(int(I_max))) + list(range(int(I_max), 0, -1))
         counter = 0
-        for i in tqdm(current_sweep):
+        for i in tqdm(current_sweep, file=sys.stdout):
             I = i * 1e-6
-            V1, V2, phi1, phi2, t = JJs.solve(
-                self.JJ, 
-                t_span, 
-                t_av_start, 
-                x0, 
-                I, 
-                iterative_av = self.iterative_av.get())
+            if model == 'ind':
+                V1, V2, phi1, phi2, ir, t = JJs.solve(
+                    self.JJ, 
+                    t_span, 
+                    t_av_start, 
+                    x0, 
+                    I, 
+                    iterative_av = self.iterative_av.get())
+
+            else:
+                V1, V2, phi1, phi2, t = JJs.solve(
+                    self.JJ, 
+                    t_span, 
+                    t_av_start, 
+                    x0, 
+                    I, 
+                    iterative_av = self.iterative_av.get())
 
             # Speichere die IVC im Dataframe
             self.store.result = pd.concat([self.store.result, pd.DataFrame({'I': [I], 'V1': [V1], 'V2': [V2]})], ignore_index=True)
@@ -193,7 +248,10 @@ class GUI:
             data = np.column_stack((t, phi1, phi2))
             np.savetxt(f"{dynamics_folder}/{counter}_{i}A.dat", data, delimiter="\t", header="t\tphi1\tphi2")
             # Lege die neuen Startbedingungen fest
-            x0 = [JJs.phi_adjust(phi1[-1]), JJs.phi_adjust(phi2[-1])]
+            if model == 'ind':
+                x0 = [JJs.phi_adjust(phi1[-1]), JJs.phi_adjust(phi2[-1]), ir[-1]]
+            else:
+                x0 = [JJs.phi_adjust(phi1[-1]), JJs.phi_adjust(phi2[-1]),]
             counter += 1
         # Speichere die IVC als .csv Datei
         self.store.result.to_csv(f"{dynamics_folder.split('/dynamics')[0]}/IVC.csv", index=False)
@@ -227,5 +285,5 @@ class GUI:
 
 if __name__ == "__main__":
     store = storage()
-    jj = JJs(14e-6, 11e-6, 11, 12, 40)
+    jj = JJs(15e-6, 11e-6, 11, 12, 40, 24e-12)
     gui = GUI(store, jj)
