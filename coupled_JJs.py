@@ -106,7 +106,10 @@ class JJs:
     
     def check_dt(self, t, phi):
         '''
-        Check if the time step is small enough
+        Check if the time step is small enough.
+        If the time step is too large, the function will adjust it
+        :param t: time
+        :param phi: phase difference
         '''
         period = JJs.period_finder(t, phi)
         if self.dt > period/20:
@@ -126,6 +129,8 @@ class JJs:
         :param x0: initial conditions
         :param I: external current
         :param iterative_av: if True, the voltage is averaged iteratively (more precise, slower)
+        :param dt: time step
+        :param model: 'ind' for inductive model, 'else' for resistive model
         :return: V1, V2, and phi1, phi2 which are starting conditions for next iteration
         '''
         methods = ['RK45', 'RK23', 'DOP853', 'Radau', 'BDF', 'LSODA']

@@ -71,11 +71,11 @@ class GUI:
         self.console_frame.grid(row=1, column=2, columnspan=2, padx=10, pady=10)
 
         # Erstelle die Konsole
-        self.console = scrolledtext.ScrolledText(self.console_frame, wrap=tk.WORD, width=50, height=10)
+        self.console = scrolledtext.ScrolledText(self.console_frame, wrap=tk.WORD, width=70, height=20)
         self.console.grid(row=0, column=0)
         # Leite die Ausgabe der Konsole um
-        # sys.stdout = RedirectText(self.console)
-        # sys.stderr = RedirectText(self.console)
+        sys.stdout = RedirectText(self.console)
+        sys.stderr = RedirectText(self.console)
 
         # Erstelle einen canvas
         self.fig = Figure(figsize=(12,8))
