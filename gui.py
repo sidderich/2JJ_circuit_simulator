@@ -222,6 +222,15 @@ class GUI:
 
         # Erstelle die JJs
         self.create_JJs(dt = float(self.config["simulation_parameters"]["time_step"]))
+    
+    def create_folder_name(self):
+        Ic1 = int(self.JJ.Ic1*1e6)
+        Ic2 = int(self.JJ.Ic2*1e6)
+        R1 = int(self.JJ.R1)
+        R2 = int(self.JJ.R2)
+        R = int(self.JJ.R)
+        L = int(self.JJ.L*1e12)
+        return f'{self.store.path}/simu{Ic1}uA_{Ic2}uA_{L}pH_{R1}ohm_{R2}ohm_{R}ohm'
         
     def set_path_btn(self):
         # browse folder tkinter
@@ -265,7 +274,7 @@ class GUI:
         # Erstelle die Ordner für die Simulation, falls sie noch nicht existieren
         # Erstelle zunächst Ordnernamen
         #results_folder = f'{self.store.path}/results_{int(self.JJ.Ic1*1e6)}uA_{int(self.JJ.Ic2*1e6)}uA_{int(self.JJ.R1)}ohm_{int(self.JJ.R2)}ohm_{int(self.JJ.R)}ohm'
-        simu_path = f'{self.store.path}/simu{int(self.JJ.Ic1*1e6)}uA_{int(self.JJ.Ic2*1e6)}uA_{int(self.JJ.R1)}ohm_{int(self.JJ.R2)}ohm_{int(self.JJ.R)}ohm'
+        simu_path = self.create_folder_name()
         dynamics_folder = f'{simu_path}/dynamics'
                 
         if not os.path.exists(simu_path):
