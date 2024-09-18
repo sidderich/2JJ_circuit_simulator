@@ -222,7 +222,8 @@ class GUI:
 
         # Erstelle die JJs
         self.create_JJs(dt = float(self.config["simulation_parameters"]["time_step"]))
-    
+
+        
     def create_folder_name(self):
         Ic1 = int(self.JJ.Ic1*1e6)
         Ic2 = int(self.JJ.Ic2*1e6)
@@ -239,16 +240,29 @@ class GUI:
 
     def thread_simulate_multiple(self):
         config_files = filedialog.askopenfilenames()
-        t = threading.Thread(target=self.simulate_multiple, args=(config_files,))
+        t = threading.Thread(target=self.simulate_multiple, args=(config_files,False))
         t.start()
 
-    def simulate_multiple(self, config_files):
+    def simulate_multiple(self, config_files, save_dynamics = False):
         counter = 1
         for config_file in config_files:
             print(f"Simulation {counter}/{len(config_files)}")
             self.config = load_config(config_file)
-            self.create_JJs()
-            self.simulate()
+
+            self.JJ = JJs(
+                Ic1 = self.config["junction_parameters"]["I_C1"],
+                Ic2 = self.config["junction_parameters"]["I_C2"],
+                R1 = self.config["junction_parameters"]["R_1"],
+                R2 = self.config["junction_parameters"]["R_2"],
+                R = self.config["junction_parameters"]["R"],
+                L = self.config["junction_parameters"]["L"],
+                dt = self.config["simulation_parameters"]["time_step"]
+            )
+            self.simulate(save_dynamics = save_dynamics)
+            counter += 1
+            # Speichere die Konfiguration
+            with open(f"{self.create_folder_name()}/config.json", 'w') as f:
+                json.dump(self.config, f, indent=4)
 
 
     
@@ -257,7 +271,7 @@ class GUI:
         t = threading.Thread(target=self.simulate, args=('ind',))
         t.start()
 
-    def simulate(self, model = 'ind'):
+    def simulate(self, model = 'ind', save_dynamics = True):
         if self.store.path is None:
             print("Please set a path first")
             return
@@ -268,6 +282,8 @@ class GUI:
             x0 = [0,0,0]
         else:
             x0 = [0,0]
+
+        # Lösche die Ergebnisse und die Dynamik
         self.store.result = self.store.result.iloc[0:0]
         self.store.dynamics = self.store.dynamics.iloc[0:0]
         
@@ -280,7 +296,7 @@ class GUI:
         if not os.path.exists(simu_path):
             os.makedirs(simu_path)
 
-        if not os.path.exists(dynamics_folder):
+        if not os.path.exists(dynamics_folder) and save_dynamics:
             os.makedirs(dynamics_folder)
 
         # Definiere die Bereiche für die Schleife
@@ -295,6 +311,7 @@ class GUI:
                     t_av_start, 
                     x0, 
                     I, 
+                    dt = self.JJ.dt,
                     iterative_av = self.iterative_av.get())
 
             else:
@@ -303,19 +320,21 @@ class GUI:
                     t_span, 
                     t_av_start, 
                     x0, 
-                    I, 
+                    I,
+                    dt = self.JJ.dt, 
                     iterative_av = self.iterative_av.get())
 
             # Speichere die IVC im Dataframe
             self.store.result = pd.concat([self.store.result, pd.DataFrame({'I': [I], 'V1': [V1], 'V2': [V2]})], ignore_index=True)
             # Speichere die Dynamik als .dat Datei
             data = np.column_stack((t, phi1, phi2))
-            np.savetxt(f"{dynamics_folder}/{counter}_{i}A.dat", data, delimiter="\t", header="t\tphi1\tphi2")
+            if save_dynamics:
+                np.savetxt(f"{dynamics_folder}/{counter}_{i}A.dat", data, delimiter="\t", header="t\tphi1\tphi2")
             # Lege die neuen Startbedingungen fest
             if model == 'ind':
                 x0 = [JJs.phi_adjust(phi1[-1]), JJs.phi_adjust(phi2[-1]), ir[-1]]
             else:
-                x0 = [JJs.phi_adjust(phi1[-1]), JJs.phi_adjust(phi2[-1]),]
+                x0 = [JJs.phi_adjust(phi1[-1]), JJs.phi_adjust(phi2[-1])]
             counter += 1
         # Speichere die IVC als .csv Datei
         self.store.result.to_csv(f"{dynamics_folder.split('/dynamics')[0]}/IVC.csv", index=False)

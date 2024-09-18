@@ -10,7 +10,7 @@ import sys
 
 
 class JJs:
-    def __init__(self, Ic1, Ic2, R1, R2, R, L):
+    def __init__(self, Ic1, Ic2, R1, R2, R, L, dt = 0.1):
         self.Ic1 = Ic1
         self.Ic2 = Ic2
         self.R1 = R1
@@ -19,7 +19,7 @@ class JJs:
         self.L = L
         
         # initialize the time step
-        self.dt = 0.1
+        self.dt = dt
 
     def model(self,t, x, I=0):
         # normalize the current to IC1
