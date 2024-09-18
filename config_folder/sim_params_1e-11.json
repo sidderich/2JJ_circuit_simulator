@@ -1,0 +1,15 @@
+{
+    "simulation_parameters": {
+        "model": "ind",
+        "time_step": 0.1,
+        "max_current": 0.0003
+    },
+    "junction_parameters": {
+        "I_C1": 5e-05,
+        "I_C2": 4.5e-05,
+        "R": 50,
+        "R_1": 15,
+        "R_2": 10,
+        "L": 1e-11
+    }
+}
