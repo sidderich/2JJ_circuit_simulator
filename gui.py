@@ -50,7 +50,7 @@ class GUI:
         self.store = store
         self.JJ = JJ
 
-
+        self.config = None
         
         # Erstelle das Fenster
         self.window = tk.Tk()
@@ -142,11 +142,15 @@ class GUI:
         self.simulate_button.pack()
 
         # Erstelle button um den Pfad zu setzen, wo die Ergebnisse gespeichert werden sollen
-        self.set_path_button = tk.Button(self.button_frame, text="Set path", command= self.set_path_btn)
+        self.set_path_button = tk.Button(self.button_frame, text="Results directory", command= self.set_path_btn)
         self.set_path_button.pack()
 
         self.plot_button = tk.Button(self.button_frame, text="Plot IVC", command= self.plot_IVC)
         self.plot_button.pack()
+
+        # Erstelle button um mehrere Simulationen hintereinander durchzuführen
+        self.simulate_multiple_button = tk.Button(self.button_frame, text="Simulate multiple", command= self.thread_simulate_multiple)
+        self.simulate_multiple_button.pack()
 
         # Erstelle togglebox für die iterative Berechnung der Spannung
         self.iterative_av = tk.BooleanVar()
@@ -173,11 +177,6 @@ class GUI:
         self.window.mainloop()
 
 
-    def set_path_btn(self):
-        # browse folder tkinter
-        directory = filedialog.askdirectory()
-        self.store.set_path(directory)
-
     def create_JJs(self):
         Ic1 = float(self.Ic1.get())
         Ic2 = float(self.Ic2.get())
@@ -188,6 +187,62 @@ class GUI:
 
         self.JJ = JJs(Ic1, Ic2, R1, R2, R, L)
         print("JJs created")
+
+    def browse_config(self):
+        '''
+        Lade einzelne Konfigurationsdatei und Erstelle die JJ
+        '''
+        try:
+            config_path = filedialog.askopenfilename()
+            self.config = load_config(config_path)
+        except:
+            print("Error loading config file")
+
+        # Lösche die Einträge in den Eingabefeldern
+        self.Ic1.delete(0, tk.END)
+        self.Ic2.delete(0, tk.END)
+        self.R1.delete(0, tk.END)
+        self.R2.delete(0, tk.END)
+        self.R.delete(0, tk.END)
+        self.L.delete(0, tk.END)
+        self.I.delete(0, tk.END)
+
+        # Setze die Einträge in den Eingabefeldern
+        self.Ic1.insert(0, self.config["junction_parameters"]["I_C1"])
+        self.Ic2.insert(0, self.config["junction_parameters"]["I_C2"])
+        self.R1.insert(0, self.config["junction_parameters"]["R_1"])
+        self.R2.insert(0, self.config["junction_parameters"]["R_2"])
+        self.R.insert(0, self.config["junction_parameters"]["R"])
+        self.L.insert(0, self.config["junction_parameters"]["L"])
+        # Setze den maximalen Strom.
+        # Multipliziere mit 1e6, um auf uA zu kommen. 
+        # Notwendig für Simulationsschleife (range() erwartet int)
+        self.I.insert(0, self.config["simulation_parameters"]["max_current"]*1e6)
+        print(type(float(self.Ic1.get())))
+
+        # Erstelle die JJs
+        self.create_JJs(dt = float(self.config["simulation_parameters"]["time_step"]))
+        
+    def set_path_btn(self):
+        # browse folder tkinter
+        directory = filedialog.askdirectory()
+        self.store.set_path(directory)
+
+    def thread_simulate_multiple(self):
+        config_files = filedialog.askopenfilenames()
+        t = threading.Thread(target=self.simulate_multiple, args=(config_files,))
+        t.start()
+
+    def simulate_multiple(self, config_files):
+        counter = 1
+        for config_file in config_files:
+            print(f"Simulation {counter}/{len(config_files)}")
+            self.config = load_config(config_file)
+            self.create_JJs()
+            self.simulate()
+
+
+    
 
     def thread_simulation(self):
         t = threading.Thread(target=self.simulate, args=('ind',))

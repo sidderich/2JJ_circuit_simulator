@@ -247,7 +247,31 @@ class JJs:
                         
             return V1, V2, phi1, phi2, t
     
-  
+    def simulate_IV(self, I_max, t_span, t_av_start, x0, dt):
+        '''
+        Simulate the IV curve
+        :param I_max: maximum current
+        :param t_span: tuple with the initial and final time
+        :param t_av_start: time to start averaging the voltage
+        :param x0: initial conditions
+        :param dt: time step
+        :return: IV curve
+        '''
+        current_sweep = list(range(0, int(I_max*1e6))) + list(range(int(I_max*1e6), 0, -1))
+        IV = np.empty((0, 3))
+        for I in current_sweep:
+            I = I*1e-6
+            V1, V2, phi1, phi2, ir, t = self.solve(
+                t_span = t_span, 
+                t_av_start = t_av_start, 
+                x0 = x0, 
+                I = I, 
+                dt=dt,
+                iterative_av=True,
+                model='ind')
+            IV = np.vstack((IV, np.array([[I, V1, V2]])))
+            x0 = [JJs.phi_adjust(phi1[-1]), JJs.phi_adjust(phi2[-1]), ir[-1]]
+        return IV
 
 
 if __name__ == "__main__":
