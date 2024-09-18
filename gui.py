@@ -71,11 +71,11 @@ class GUI:
         self.console_frame.grid(row=1, column=2, columnspan=2, padx=10, pady=10)
 
         # Erstelle die Konsole
-        self.console = scrolledtext.ScrolledText(self.console_frame, wrap=tk.WORD, width=70, height=20)
-        self.console.grid(row=0, column=0)
-        # Leite die Ausgabe der Konsole um
-        sys.stdout = RedirectText(self.console)
-        sys.stderr = RedirectText(self.console)
+        # self.console = scrolledtext.ScrolledText(self.console_frame, wrap=tk.WORD, width=70, height=20)
+        # self.console.grid(row=0, column=0)
+        # # Leite die Ausgabe der Konsole um
+        # sys.stdout = RedirectText(self.console)
+        # sys.stderr = RedirectText(self.console)
 
         # Erstelle einen canvas
         self.fig = Figure(figsize=(12,8))
@@ -275,7 +275,10 @@ class GUI:
         if self.store.path is None:
             print("Please set a path first")
             return
-        I_max = float(self.I.get())
+        if self.config is not None:
+            I_max = self.config["simulation_parameters"]["max_current"]*1e6
+        else:
+            I_max = float(self.I.get())
         t_span = (0, 500)
         t_av_start = 100
         if model == 'ind':
