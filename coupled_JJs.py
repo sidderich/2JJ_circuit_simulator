@@ -83,24 +83,14 @@ class JJs:
         Find time period of the oscillation
         '''
 
-        # Find the peaks
-
-        '''peaks = np.where((phi[1:-1] > phi[:-2]) & (phi[1:-1] > phi[2:]))[0]'''
-
         peaks, _ = find_peaks(np.sin(phi))
+
         if len(peaks) < 2:
-            print('Not enough peaks found to calculate the period of oscillation')
+            print('Error: Not enough peaks found to calculate the period of the phase. Exiting...')
             sys.exit(1)
 
         period = np.mean(np.diff(t[peaks]))
-        # Calculate threshhold for standard derivation
-        # threshhold = 0.01 * period
-        # Show warning if the period is not stable
-        # Use standard derivation of the period if the period is not stable
-        '''if np.std(np.diff(t[peaks])) > threshhold:
-            print('\n WARNING: The period is not stable')'''
 
-        # Calculate the period
         return period
     
     
@@ -110,6 +100,7 @@ class JJs:
         If the time step is too large, the function will adjust it
         :param t: time
         :param phi: phase difference
+        :return: True if the time step is small enough, False otherwise
         '''
         period = JJs.period_finder(t, phi)
         if self.dt > period/20:

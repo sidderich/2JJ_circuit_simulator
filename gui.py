@@ -44,22 +44,39 @@ class storage:
     def set_path(self, path):
         self.path = path
 
+    def get_dynamic(self, index):
+        '''
+        Returnes data with dynamics.
+        Takes the path of the dynamics folder and returns the dataframe of the file with given index.
+        :param index: Index of the file to be loaded
+        :return: np.array with the data of the file
+        '''
+        files = os.listdir(f'{self.path}/dynamics')
+        files = sorted(files, key=lambda x: int(x.split('_')[0]))
+        data = np.loadtxt(f'{self.path}/dynamics/{files[index]}', delimiter="\t")
+        return data
+
+
+
 class GUI:
     def __init__(self, store, JJ):
         # Initialisiere den Speicher und die JJs
         self.store = store
         self.JJ = JJ
 
-        self.config = None
+        self.config = load_config('config.json')
         
         # Erstelle das Fenster
         self.window = tk.Tk()
         self.window.title("2 JJ Simulation")
         self.window.geometry(f"{self.window.winfo_screenwidth()}x{self.window.winfo_screenheight()}")
 
-        # Erstelle Frame für die Eingabefelder
-        self.param_frame = tk.Frame(self.window)
-        self.param_frame.grid(row=0, column=2)
+        # Initialisiere das Subwindow
+        self.param_window = None
+
+        # Erstelle eine Menüleiste
+        self.menubar = self.create_menu()
+
         # Erstelle Frame für die Buttons
         self.button_frame = tk.Frame(self.window)
         self.button_frame.grid(row=0, column=3)
@@ -76,92 +93,26 @@ class GUI:
         # # Leite die Ausgabe der Konsole um
         # sys.stdout = RedirectText(self.console)
         # sys.stderr = RedirectText(self.console)
+        
+        # Ersttelle variable für iterative Berechnung der Spannung
+        self.iterative_av = tk.BooleanVar()
+        self.iterative_av.set(True)
 
         # Erstelle einen canvas
-        self.fig = Figure(figsize=(12,8))
+        self.fig = Figure(figsize=(14,10))
         self.ax = self.fig.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-        # Erstelle die Toolbar
+        # Erstelle die Toolbar für den canvas
         toolbar = NavigationToolbar2Tk(self.canvas, self.plot_frame)
         toolbar.update()
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-
-
-        # Erstelle Eingabefelder für die Parameter
-        self.Ic1_label = tk.Label(self.param_frame, text="Ic1")
-        self.Ic1_label.pack()
-        self.Ic1 = tk.Entry(self.param_frame)
-        self.Ic1.pack()
-        self.Ic1.insert(0, JJ.Ic1)
-
-        self.Ic2_label = tk.Label(self.param_frame, text="Ic2")
-        self.Ic2_label.pack()
-        self.Ic2 = tk.Entry(self.param_frame)
-        self.Ic2.pack()
-        self.Ic2.insert(0, JJ.Ic2)
-
-        self.R1_label = tk.Label(self.param_frame, text="R1")
-        self.R1_label.pack()
-        self.R1 = tk.Entry(self.param_frame)
-        self.R1.pack()
-        self.R1.insert(0, JJ.R1)
-
-
-        self.R2_label = tk.Label(self.param_frame, text="R2")
-        self.R2_label.pack()
-        self.R2 = tk.Entry(self.param_frame)
-        self.R2.pack()
-        self.R2.insert(0, JJ.R2)
-
-        self.R_label = tk.Label(self.param_frame, text="R")
-        self.R_label.pack()
-        self.R = tk.Entry(self.param_frame)
-        self.R.pack()
-        self.R.insert(0, JJ.R)
-
-        self.L_label = tk.Label(self.param_frame, text="L")
-        self.L_label.pack()
-        self.L = tk.Entry(self.param_frame)
-        self.L.pack()
-        self.L.insert(0, JJ.L)
-
-        # Bis zu diesem Strom soll simuliert werden
-        self.I_label = tk.Label(self.param_frame, text="I_max")
-        self.I_label.pack()
-        self.I = tk.Entry(self.param_frame)
-        self.I.pack()
-        self.I.insert(0, "200")
-
-        # Erstelle button um JJs zu erstellen
-        self.create_JJs_button = tk.Button(self.button_frame, text="Create JJs", command=self.create_JJs)
-        self.create_JJs_button.pack()
-        # Erstelle button um zu simulieren
-        self.simulate_button = tk.Button(self.button_frame, text="Simulate", command= self.thread_simulation)
-        self.simulate_button.pack()
-
-        # Erstelle button um den Pfad zu setzen, wo die Ergebnisse gespeichert werden sollen
-        self.set_path_button = tk.Button(self.button_frame, text="Results directory", command= self.set_path_btn)
-        self.set_path_button.pack()
-
-        self.plot_button = tk.Button(self.button_frame, text="Plot IVC", command= self.plot_IVC)
-        self.plot_button.pack()
-
-        # Erstelle button um mehrere Simulationen hintereinander durchzuführen
-        self.simulate_multiple_button = tk.Button(self.button_frame, text="Simulate multiple", command= self.thread_simulate_multiple)
-        self.simulate_multiple_button.pack()
-
-        # Erstelle togglebox für die iterative Berechnung der Spannung
-        self.iterative_av = tk.BooleanVar()
-        self.iterative_av.set(True)
-        self.iterative_av_check = tk.Checkbutton(self.button_frame, text="Iterative averaging", variable=self.iterative_av)
-        self.iterative_av_check.pack()
-
+           
         # Erstelle entry für den Index der dynamic file
-        self.index_label = tk.Label(self.param_frame, text="Index")
+        self.index_label = tk.Label(self.button_frame, text="Index")
         self.index_label.pack()
-        self.index = tk.Entry(self.param_frame)
+        self.index = tk.Entry(self.button_frame)
         self.index.pack()
         self.index.insert(0, "0")
 
@@ -172,20 +123,137 @@ class GUI:
         # Aktualisiere Fenster und passe Größe an
         self.window.update()
         self.window.geometry("")
-
-
         self.window.mainloop()
 
+    def create_menu(self):
+        menubar = tk.Menu(self.window)
 
-    def create_JJs(self):
-        Ic1 = float(self.Ic1.get())
-        Ic2 = float(self.Ic2.get())
-        R1 = float(self.R1.get())
-        R2 = float(self.R2.get())
-        R = float(self.R.get())
-        L = float(self.L.get())
+        # File menu
+        filemenu = tk.Menu(menubar, tearoff=0)
+        filemenu.add_command(label="Load IVC", command=self.load_IVC)
+        filemenu.add_command(label="Load config", command=self.browse_config)
+        filemenu.add_command(label="Results directory", command=self.set_path_btn)
+        menubar.add_cascade(label="File", menu=filemenu)
 
-        self.JJ = JJs(Ic1, Ic2, R1, R2, R, L)
+        # Simulation menu
+        simmenu = tk.Menu(menubar, tearoff=0)
+        simmenu.add_command(label="Parameters", command=self.param_window_btn)
+        simmenu.add_command(label="Simulate", command=self.thread_simulation)
+        simmenu.add_command(label="Simulate multiple", command=self.thread_simulate_multiple)
+        menubar.add_cascade(label="Simulation", menu=simmenu)
+
+        # Canvas menu
+        canvasmenu = tk.Menu(menubar, tearoff=0)
+        canvasmenu.add_command(label="Plot IVC", command=self.plot_IVC)
+        canvasmenu.add_command(label="Plot phi", command=self.plot_dynamics)
+        menubar.add_cascade(label="Plotter", menu=canvasmenu)
+
+        # Menüleiste zum Fenster hinzufügen
+        self.window.config(menu=menubar)
+
+    def param_window_btn(self):
+        # Erstelle das Subwindow nur, wenn es noch nicht existiert
+        if self.param_window is None or not self.param_window.winfo_exists():
+            self.param_window = tk.Toplevel(self.window)
+            self.param_window.title("Parameters")
+            self.param_window.geometry("300x400")
+            
+        # Erstelle Eingabefelder für die Parameter
+        self.Ic1_label = tk.Label(self.param_window, text="Ic1")
+        self.Ic1_label.pack()
+        self.Ic1 = tk.Entry(self.param_window)
+        self.Ic1.pack()
+        self.Ic1.insert(0, self.JJ.Ic1)
+
+        self.Ic2_label = tk.Label(self.param_window, text="Ic2")
+        self.Ic2_label.pack()
+        self.Ic2 = tk.Entry(self.param_window)
+        self.Ic2.pack()
+        self.Ic2.insert(0, self.JJ.Ic2)
+
+        self.R1_label = tk.Label(self.param_window, text="R1")
+        self.R1_label.pack()
+        self.R1 = tk.Entry(self.param_window)
+        self.R1.pack()
+        self.R1.insert(0, self.JJ.R1)
+
+
+        self.R2_label = tk.Label(self.param_window, text="R2")
+        self.R2_label.pack()
+        self.R2 = tk.Entry(self.param_window)
+        self.R2.pack()
+        self.R2.insert(0, self.JJ.R2)
+
+        self.R_label = tk.Label(self.param_window, text="R")
+        self.R_label.pack()
+        self.R = tk.Entry(self.param_window)
+        self.R.pack()
+        self.R.insert(0, self.JJ.R)
+
+        self.L_label = tk.Label(self.param_window, text="L")
+        self.L_label.pack()
+        self.L = tk.Entry(self.param_window)
+        self.L.pack()
+        self.L.insert(0, self.JJ.L)
+
+        # Bis zu diesem Strom soll simuliert werden
+        self.I_label = tk.Label(self.param_window, text="I_max")
+        self.I_label.pack()
+        self.I = tk.Entry(self.param_window)
+        self.I.pack()
+        try:
+            self.I.insert(0, self.config["simulation_parameters"]["max_current"])
+        except TypeError:
+            self.I.insert(0, '0.0003')
+
+        # Zeitschritt für die Simulation
+        self.dt_label = tk.Label(self.param_window, text="Time step")
+        self.dt_label.pack()
+        self.dt = tk.Entry(self.param_window)
+        self.dt.pack()
+        try:
+            self.dt.insert(0, self.config["simulation_parameters"]["time_step"])
+        except TypeError:
+            self.dt.insert(0, '0.05')
+
+
+
+
+
+        # Erstelle togglebox für die iterative Berechnung der Spannung
+        self.iterative_av_check = tk.Checkbutton(self.param_window, text="Iterative averaging", variable=self.iterative_av)
+        self.iterative_av_check.pack()
+
+        # Erstelle button um JJs zu erstellen
+        self.create_JJs_button = tk.Button(self.param_window, text="Create JJs", command=self.create_JJs)
+        self.create_JJs_button.pack()
+
+    def create_JJs(self, dt = 0.01):
+        '''
+        Erstelle die JJs mit den eingegebenen Parametern
+        Existiert kein Subwindow, so werden die Parameter aus self.config übernommen
+        '''
+        if self.param_window is not None and self.param_window.winfo_exists():
+            Ic1 = float(self.Ic1.get())
+            Ic2 = float(self.Ic2.get())
+            R1 = float(self.R1.get())
+            R2 = float(self.R2.get())
+            R = float(self.R.get())
+            L = float(self.L.get())
+            self.config["simulation_parameters"]["max_current"] = float(self.I.get())
+            dt = float(self.dt.get())
+            self.config["simulation_parameters"]["time_step"] = dt
+
+        else:
+            Ic1 = self.config["junction_parameters"]["I_C1"]
+            Ic2 = self.config["junction_parameters"]["I_C2"]
+            R1 = self.config["junction_parameters"]["R_1"]
+            R2 = self.config["junction_parameters"]["R_2"]
+            R = self.config["junction_parameters"]["R"]
+            L = self.config["junction_parameters"]["L"]
+            dt = self.config["simulation_parameters"]["time_step"]
+
+        self.JJ = JJs(Ic1, Ic2, R1, R2, R, L, dt = dt)
         print("JJs created")
 
     def browse_config(self):
@@ -195,48 +263,28 @@ class GUI:
         try:
             config_path = filedialog.askopenfilename()
             self.config = load_config(config_path)
+            # Erstelle die JJs
+            self.create_JJs(dt = float(self.config["simulation_parameters"]["time_step"]))
         except:
             print("Error loading config file")
 
-        # Lösche die Einträge in den Eingabefeldern
-        self.Ic1.delete(0, tk.END)
-        self.Ic2.delete(0, tk.END)
-        self.R1.delete(0, tk.END)
-        self.R2.delete(0, tk.END)
-        self.R.delete(0, tk.END)
-        self.L.delete(0, tk.END)
-        self.I.delete(0, tk.END)
-
-        # Setze die Einträge in den Eingabefeldern
-        self.Ic1.insert(0, self.config["junction_parameters"]["I_C1"])
-        self.Ic2.insert(0, self.config["junction_parameters"]["I_C2"])
-        self.R1.insert(0, self.config["junction_parameters"]["R_1"])
-        self.R2.insert(0, self.config["junction_parameters"]["R_2"])
-        self.R.insert(0, self.config["junction_parameters"]["R"])
-        self.L.insert(0, self.config["junction_parameters"]["L"])
-        # Setze den maximalen Strom.
-        # Multipliziere mit 1e6, um auf uA zu kommen. 
-        # Notwendig für Simulationsschleife (range() erwartet int)
-        self.I.insert(0, self.config["simulation_parameters"]["max_current"]*1e6)
-        print(type(float(self.Ic1.get())))
-
-        # Erstelle die JJs
-        self.create_JJs(dt = float(self.config["simulation_parameters"]["time_step"]))
-
+       
         
+
     def create_folder_name(self):
-        Ic1 = int(self.JJ.Ic1*1e6)
-        Ic2 = int(self.JJ.Ic2*1e6)
+        Ic1 = int(self.JJ.Ic1*1e6) #Umrechnung in A von uA
+        Ic2 = int(self.JJ.Ic2*1e6) #Umrechnung in A von uA
         R1 = int(self.JJ.R1)
         R2 = int(self.JJ.R2)
         R = int(self.JJ.R)
-        L = int(self.JJ.L*1e12)
+        L = int(self.JJ.L*1e12) #Umrechnung in H von pH
         return f'{self.store.path}/simu{Ic1}uA_{Ic2}uA_{L}pH_{R1}ohm_{R2}ohm_{R}ohm'
         
     def set_path_btn(self):
         # browse folder tkinter
         directory = filedialog.askdirectory()
         self.store.set_path(directory)
+        print(f"Results directory set to {directory}")
 
     def thread_simulate_multiple(self):
         config_files = filedialog.askopenfilenames()
@@ -265,13 +313,16 @@ class GUI:
                 json.dump(self.config, f, indent=4)
 
 
-    
-
     def thread_simulation(self):
         t = threading.Thread(target=self.simulate, args=('ind',))
         t.start()
 
     def simulate(self, model = 'ind', save_dynamics = True):
+        '''
+        Simliert die IVC der JJs
+        :param model: 'ind' für induktivitätsmodell, 'else' für resistives Modell
+        :param save_dynamics: True, wenn die Dynamik gespeichert werden soll (Default: True)
+        '''
         if self.store.path is None:
             print("Please set a path first")
             return
@@ -341,26 +392,54 @@ class GUI:
             counter += 1
         # Speichere die IVC als .csv Datei
         self.store.result.to_csv(f"{dynamics_folder.split('/dynamics')[0]}/IVC.csv", index=False)
-        
 
-        
+
+    def load_IVC(self):
+        '''
+        Lade die IVC.csv Datei
+        '''
+        try:
+            self.store.path = filedialog.askopenfilename()
+        except:
+            print("Error loading IVC file")
+        self.store.result = pd.read_csv(f'{self.store.path}', delimiter=',')
+        self.plot_IVC()
+
+
     def plot_IVC(self):
+        '''
+        Stelle die IVC der JJs dar
+        '''
         self.ax.clear()
         
         self.ax.plot(self.store.result['V1'], self.store.result['I']*1e6, label='V1')
         self.ax.plot(self.store.result['V2'], self.store.result['I']*1e6, label='V2')
         self.canvas.draw()
 
+    def load_dynamics(self):
+        '''
+        Lade die Dynamik Datei
+        '''
+        try:
+            self.store.path = filedialog.askopenfilename()
+        except:
+            print("Error loading dynamics file")
+        self.store.dynamics = store.get_dynamic(int(self.index.get()))
+
     def plot_dynamics(self):
+        '''
+        Stelle die Dynamik der JJs dar
+        '''
         # Lade die Dynamik Datei
         index = int(self.index.get())
 
         # Erstelle Liste mit allen Dateien
-        files = os.listdir(f'{self.store.path}/simu{int(self.JJ.Ic1*1e6)}uA_{int(self.JJ.Ic2*1e6)}uA_{int(self.JJ.R1)}ohm_{int(self.JJ.R2)}ohm_{int(self.JJ.R)}ohm/dynamics')
+        folder_name = self.create_folder_name()
+        files = os.listdir(f'{folder_name}/dynamics')
         # Sortiere die Liste Files, damit die Dateien in der richtigen Reihenfolge geplottet werden
         files = sorted(files, key=lambda x: int(x.split('_')[0]))
         # Lade die Datei
-        data = np.loadtxt(f'{self.store.path}/simu{int(self.JJ.Ic1*1e6)}uA_{int(self.JJ.Ic2*1e6)}uA_{int(self.JJ.R1)}ohm_{int(self.JJ.R2)}ohm_{int(self.JJ.R)}ohm/dynamics/{files[index]}', delimiter="\t")
+        data = np.loadtxt(f'{folder_name}/dynamics/{files[index]}', delimiter="\t")
         self.ax.clear()
         self.ax.plot(data[:,0], np.sin(data[:,1])+1, label='phi1')
         self.ax.plot(data[:,0], np.sin(data[:,2])-1, label='phi2')
